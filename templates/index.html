@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Analysis Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f9;
+            color: #333;
+        }
+        .container {
+            width: 90%;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+            min-height: 100px;
+            font-family: inherit;
+        }
+        .image-upload {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .upload-btn {
+            padding: 10px 15px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .upload-btn:hover {
+            background-color: #2980b9;
+        }
+        .preview-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .image-preview {
+            width: 150px;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        .submit-btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .submit-btn:hover {
+            background-color: #219955;
+        }
+        .submit-btn:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        .result-container {
+            margin-top: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            display: none;
+        }
+        .loading {
+            text-align: center;
+            display: none;
+        }
+        .error-message {
+            color: #e74c3c;
+            margin-top: 5px;
+            font-size: 14px;
+        }
+        /* For JSON formatting */
+        pre {
+            background-color: #f8f8f8;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+        .sample-prompts {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #ecf0f1;
+            border-radius: 4px;
+        }
+        .prompt-example {
+            cursor: pointer;
+            padding: 5px;
+            margin-bottom: 5px;
+            background-color: #d6eaf8;
+            border-radius: 4px;
+        }
+        .prompt-example:hover {
+            background-color: #aed6f1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Image Analysis Tool</h1>
+        
+        <form id="analysis-form">
+            <div class="form-group">
+                <label for="images">Upload Images:</label>
+                <div class="image-upload">
+                    <input type="file" id="image-upload" accept="image/*" multiple>
+                    <div class="preview-container" id="image-previews"></div>
+                </div>
+                <small>You can upload multiple images for comparison</small>
+                <div class="error-message" id="image-error"></div>
+            </div>
+            
+            <div class="form-group">
+                <label for="prompt">Enter your analysis instructions:</label>
+                <textarea id="prompt" name="prompt" placeholder="Describe what you want Claude to analyze in these images..."></textarea>
+                <div class="error-message" id="prompt-error"></div>
+                
+                <div class="sample-prompts">
+                    <p><strong>Sample prompts:</strong></p>
+                    <div class="prompt-example" onclick="setPrompt('Compare and identify which parts of the wiring are correct, which are incorrect, and why. Then, provide clear steps to fix any mistakes. Please respond with JSON having the keys: correctWiring, incorrectWiring, stepsToFix')">Wiring comparison analysis</div>
+                    <div class="prompt-example" onclick="setPrompt('Identify the breaker sizes visible in this image. Check carefully and provide the size written on top of each breaker. Return as JSON.')">Breaker size identification</div>
+                    <div class="prompt-example" onclick="setPrompt('Analyze this electrical panel and identify potential safety issues or code violations. List each issue and explain why it\'s problematic.')">Electrical safety inspection</div>
+                </div>
+            </div>
+            
+            <button type="submit" class="submit-btn" id="submit-btn">Analyze Images</button>
+        </form>
+        
+        <div class="loading" id="loading">
+            <p>Analyzing images, please wait...</p>
+            <!-- You could add a spinner here -->
+        </div>
+        
+        <div class="result-container" id="result-container">
+            <h2>Analysis Results:</h2>
+            <div id="result-output"></div>
+        </div>
+    </div>
+
+    <script>
+        // Handle image uploads and previews
+        const imageUpload = document.getElementById('image-upload');
+        const imagePreviews = document.getElementById('image-previews');
+        const uploadedImages = new Set();
+        
+        imageUpload.addEventListener('change', function() {
+            // Clear previous previews
+            imagePreviews.innerHTML = '';
+            uploadedImages.clear();
+            
+            // Add new previews
+            for (const file of this.files) {
+                if (file.type.startsWith('image/')) {
+                    uploadedImages.add(file);
+                    
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        img.className = 'image-preview';
+                        imagePreviews.appendChild(img);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            }
+        });
+        
+        // Sample prompt selection
+        function setPrompt(text) {
+            document.getElementById('prompt').value = text;
+        }
+        
+        // Form submission
+        const analysisForm = document.getElementById('analysis-form');
+        const promptInput = document.getElementById('prompt');
+        const submitBtn = document.getElementById('submit-btn');
+        const loading = document.getElementById('loading');
+        const resultContainer = document.getElementById('result-container');
+        const resultOutput = document.getElementById('result-output');
+        const imageError = document.getElementById('image-error');
+        const promptError = document.getElementById('prompt-error');
+        
+        analysisForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Clear previous errors
+            imageError.textContent = '';
+            promptError.textContent = '';
+            
+            // Validate
+            let hasError = false;
+            
+            if (uploadedImages.size === 0) {
+                imageError.textContent = 'Please upload at least one image';
+                hasError = true;
+            }
+            
+            if (!promptInput.value.trim()) {
+                promptError.textContent = 'Please enter analysis instructions';
+                hasError = true;
+            }
+            
+            if (hasError) return;
+            
+            // Show loading, hide results
+            submitBtn.disabled = true;
+            loading.style.display = 'block';
+            resultContainer.style.display = 'none';
+            
+            // Create form data
+            const formData = new FormData();
+            formData.append('prompt', promptInput.value);
+            uploadedImages.forEach(image => {
+                formData.append('images', image);
+            });
+            
+            try {
+                // Send to API
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    // Success
+                    resultContainer.style.display = 'block';
+                    
+                    // Display differently based on the response type
+                    if (typeof result.response === 'object') {
+                        // It's JSON
+                        resultOutput.innerHTML = `<pre>${JSON.stringify(result.response, null, 2)}</pre>`;
+                    } else {
+                        // It's text
+                        resultOutput.innerHTML = `<p>${result.response.replace(/\n/g, '<br>')}</p>`;
+                    }
+                } else {
+                    // Error from the server
+                    resultContainer.style.display = 'block';
+                    resultOutput.innerHTML = `<p class="error-message">Error: ${result.error}</p>`;
+                }
+            } catch (error) {
+                // Network or other error
+                resultContainer.style.display = 'block';
+                resultOutput.innerHTML = `<p class="error-message">Error: ${error.message}</p>`;
+            } finally {
+                // Hide loading, enable submit
+                loading.style.display = 'none';
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
