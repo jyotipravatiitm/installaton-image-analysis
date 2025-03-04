@@ -11,7 +11,7 @@ import { AnalysisProvider } from '@/context/analysis-context';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Enphase Image Analysis',
+  title: 'Image Analysis',
   description: 'Analyze electrical wiring and component images with AI',
 };
 
